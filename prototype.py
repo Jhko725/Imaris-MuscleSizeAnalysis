@@ -5,33 +5,32 @@ import matplotlib.ticker as ticker
 import statsmodels.api as sm
 import numpy as np
 
+from utils import *
+from statistics import descr_stat_func, A_statistic
+from bootstrap import bootstrap_confidence_interval, bootstrap_confidence_interval_2samp
 
 plt.rcParams["font.size"] = 14
 plt.rcParams["grid.linestyle"] = "--"
 plt.rcParams["axes.grid"] = True
 plt.rcParams["axes.labelsize"] = "medium"
 
-def import_data(filepath):
-    df_raw = pd.read_excel(filepath, skiprows = None)
-    labels = df_raw.columns[[0, 3]]
-    df = df_raw.iloc[1:, [1, 4]]
-    df.columns = labels
-    return df
-
-def import_data_list(filepath_list):
-    return list(map(import_data, filepath_list))
 
 # %%
-fed_fast_filepaths = ["./fed-fast manual.xlsx", "./fed-fast automated.xlsx", "./fed-fast corrected.xlsx"]
+fed_fast_filepaths = ["./data/fed-fast manual.xlsx", "./data/fed-fast automated.xlsx", "./data/fed-fast corrected.xlsx"]
 fed_fast_dataset = import_data_list(fed_fast_filepaths)
 
-shLacz_filepaths = ["./shLacz manual.xlsx", "./shLacz automated.xlsx", "./shLacz corrected Aviv.xlsx", "./shLacz corrected Nadav.xlsx"]
+shLacz_filepaths = ["./data/shLacz manual.xlsx", "./data/shLacz automated.xlsx", "./data/shLacz corrected Aviv.xlsx", "./data/shLacz corrected Nadav.xlsx"]
 shLacz_dataset = import_data_list(shLacz_filepaths)
 
-shCAPN1_filepaths = ["./shCAPN1 manual Aviv.xlsx", "./shCAPN1 manual Nadav.xlsx", "./shCAPN1 automated.xlsx", "./shCAPN1 corrected.xlsx"]
+shCAPN1_filepaths = ["./data/shCAPN1 manual Aviv.xlsx", "./data/shCAPN1 manual Nadav.xlsx", "./data/shCAPN1 automated.xlsx", "./data/shCAPN1 corrected.xlsx"]
 shCAPN1_dataset = import_data_list(shCAPN1_filepaths)
 # %%
-fed_fast_dataset[2].shape
+sample1 = np.array(fed_fast_dataset[0].iloc[:,0], dtype = np.float32)
+sample2 = np.array(fed_fast_dataset[0].iloc[:,1], dtype = np.float32)
+# %%
+np.random.seed(10)
+stat_func = descr_stat_func["median"]
+bootstrap_confidence_interval(sample1, stat_func, 20000, CI_algorithm = "BCa")
 # %%
 def plot_empirical_distribution(dataframe_list, labels, density = True):
     x_scale = 100
@@ -144,19 +143,6 @@ p
 # %%
 scstats.mstats.spearmanr(sample1, sample2)
 # %%
-
-# %%
-
-# %%
-def calculate_effect_size(sample1, sample2):
-    sample1 = np.array(sample1, dtype = float)
-    sample2 = np.array(sample2, dtype = float)
-
-    N_total = len(sample1)*len(sample2)
-    s1gts2 = np.sum(sample1.reshape(-1, 1) > sample2.reshape(1, -1))/N_total
-    s1eqs2 = np.sum(sample1.reshape(-1, 1) == sample2.reshape(1, -1))/N_total
-    return s1gts2+0.5*s1eqs2
-# %%
 data_ind = 0
 sample1, sample2 = shLacz_dataset[data_ind].iloc[:,0], shLacz_dataset[data_ind].iloc[:,1]
 scstats.mstats.brunnermunzel(sample1, sample2, alternative = "two-sided", distribution = "normal")
@@ -203,13 +189,7 @@ def plot_descr_stats_table(dataframe_list, label_list, statistics_names):
 # %%
 ststats.descriptivestats.describe(sample0)
 # %%
-np.mean(sample0)
-# %%
-np.median(sample0)
-# %%
-scstats.tstd(sample0)
-# %%
-scstats.skew(sample0)
+
 # %%
 labels = ["Manual", "Automated", "Corrected"]
 stat_names = ["median", "mean", "std", "skew"]
@@ -225,24 +205,6 @@ sample2 = np.array(fed_fast_dataset[2].iloc[:, col_ind], dtype = float)
 
 wdist1 = scstats.wasserstein_distance(sample0, sample1)
 wdist2 = scstats.wasserstein_distance(sample0, sample2)
-# %%
-from numpy.random import default_rng
-def draw_bootstrap_samples(sample_array, N_bootstrap = 10000):
-    rng = default_rng()
-    bootstrap_samples = rng.choice(sample_array, size = (N_bootstrap, len(sample_array)))
-    return bootstrap_samples
-
-def calculate_bootstrap_CI(statistics_function, sample_array, confidence_level = 0.95, N_bootstrap = 10000):
-    sample_stat = statistics_function(sample_array)
-    bootstrap_samples = draw_bootstrap_samples(sample_array, N_bootstrap = N_bootstrap)
-    bootstrap_stats = statistics_function(bootstrap_samples, axis = 1)
-    bootstrap_differences = bootstrap_stats - sample_stat
-
-    alpha = 1-confidence_level
-    difference_CI = np.quantile(bootstrap_differences, (0.5*alpha, 1-0.5*alpha))
-    print(difference_CI)
-    CI = np.flip(sample_stat - difference_CI)
-    return sample_stat, CI
 
 # %%
 sample = fed_fast_dataset[1].iloc[:,0]
@@ -254,7 +216,7 @@ calculate_bootstrap_CI(np.median, sample, N_bootstrap = 100000)
 # %%
 calculate_bootstrap_CI(scstats.tstd, sample, N_bootstrap = 100000)
 # %%
-calculate_bootstrap_CI(scstats.skew, sample, N_bootstrap = 20000)
+calculate_bootstrap_CI(scstats.skew, sample, N_bootstrap = 100000)
 # %%
 true_mean = np.mean(sample0)
 mean_dist = np.mean(boot0, axis = 1)
@@ -316,16 +278,7 @@ fig, axes = plot_metrics_table(fed_fast_dataset, labels, metric_functions, metri
 fig.suptitle("Distance metrics between the manual distribution")
 plt.tight_layout()
 # %%
-# %%
-kde0 = sm.nonparametric.KDEUnivariate(sample0)
-kde0.fit(bw = "silverman")
-kde1 = sm.nonparametric.KDEUnivariate(sample1)
-kde1.fit(bw = "silverman")
-fig, ax = plt.subplots(1, 1, figsize = (7, 5))
-ax.hist(sample1, bins = 50, density = True)
-ax.plot(kde1.support, kde1.density, lw = 3)
-# %%
-len(kde0.support)
+
 # %%
 from matplotlib.patches import Rectangle
 def plot_experiment_comparision_histogram(ax, dataframe):
