@@ -13,3 +13,14 @@ def import_data(filepath):
 
 def import_data_list(filepath_list):
     return list(map(import_data, filepath_list))
+
+
+class Statistic():
+
+    def __init__(self, value, CI, name):
+        self.value = value
+        self.CI = tuple(CI)
+        self.name = name
+
+    def __str__(self):
+        return f"{self.value :.2f} [{self.CI[0] :.2f}, {self.CI[1] :.2f}]"

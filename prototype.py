@@ -28,9 +28,39 @@ shCAPN1_dataset = import_data_list(shCAPN1_filepaths)
 sample1 = np.array(fed_fast_dataset[0].iloc[:,0], dtype = np.float32)
 sample2 = np.array(fed_fast_dataset[0].iloc[:,1], dtype = np.float32)
 # %%
-np.random.seed(10)
-stat_func = descr_stat_func["median"]
-bootstrap_confidence_interval(sample1, stat_func, 20000, CI_algorithm = "BCa")
+fed_fast_dataset[0].columns
+# %%
+output = bootstrap_confidence_interval(sample1, descr_stat_func["mean"], 20000, CI_algorithm = "BCa")
+# %%
+stat = Statistic(*output, "mean")
+print(stat)
+# %%
+def _calculate_stat_diff(statistic1, statistic2):
+    val1 = statistic1.value
+    val2 = statistic2.value
+    return 100*(val2 - val1)/val1
+
+def calculate_descr_stat_comparison(dataframe, statistic = "mean", bootstrap_sample_nb = 20000, random_seed = 10):
+    # Assume first column corresponds to the control
+    sample1 = np.array(dataframe.iloc[:,0], dtype = np.float32)
+    sample2 = np.array(dataframe.iloc[:,1], dtype = np.float32)
+    group_names = list(dataframe.columns)
+
+    np.random.seed(random_seed)
+    stat_func = descr_stat_func[statistic]
+
+    out1 = bootstrap_confidence_interval(sample1, stat_func, 20000, CI_algorithm = "BCa")
+    out2 = bootstrap_confidence_interval(sample2, stat_func, 20000, CI_algorithm = "BCa")
+    stat1, stat2 = Statistic(*out1, statistic), Statistic(*out2, statistic)
+    diff = _calculate_stat_diff(stat1, stat2)
+
+    col_names = group_names.append("Change")
+    result_df = pd.DataFrame([[str(stat1), str(stat2), f"{diff} :.2f"]], columns = col_names)
+    return result_df
+# %%
+df = calculate_descr_stat_comparison(fed_fast_dataset[0])
+# %%
+df
 # %%
 def plot_empirical_distribution(dataframe_list, labels, density = True):
     x_scale = 100
