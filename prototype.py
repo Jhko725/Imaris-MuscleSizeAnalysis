@@ -1,66 +1,129 @@
 #%%
+%reload_ext autoreload
+%autoreload 2
+
 import pandas as pd
 import matplotlib.pyplot as plt
-import matplotlib.ticker as ticker
-import statsmodels.api as sm
 import numpy as np
+from numpy.random import default_rng
 
 from utils import *
-from statistics import descr_stat_func, A_statistic
+from statistics import descr_stat_func, A_statistic, KS_statistic, calculate_QQplot
 from bootstrap import bootstrap_confidence_interval, bootstrap_confidence_interval_2samp
+from visualizations import plot_experiment_histograms, plot_histogram, plot_QQ, plot_QQplot_comparison
 
 plt.rcParams["font.size"] = 14
 plt.rcParams["grid.linestyle"] = "--"
 plt.rcParams["axes.grid"] = True
 plt.rcParams["axes.labelsize"] = "medium"
 
-
 # %%
 fed_fast_filepaths = ["./data/fed-fast manual.xlsx", "./data/fed-fast automated.xlsx", "./data/fed-fast corrected.xlsx"]
 fed_fast_dataset = import_data_list(fed_fast_filepaths)
 
-shLacz_filepaths = ["./data/shLacz manual.xlsx", "./data/shLacz automated.xlsx", "./data/shLacz corrected Aviv.xlsx", "./data/shLacz corrected Nadav.xlsx"]
+shLacz_filepaths = ["./data/shLacz manual.xlsx", "./data/shLacz automated.xlsx", "./data/shLacz corrected Aviv.xlsx"]
 shLacz_dataset = import_data_list(shLacz_filepaths)
 
-shCAPN1_filepaths = ["./data/shCAPN1 manual Aviv.xlsx", "./data/shCAPN1 manual Nadav.xlsx", "./data/shCAPN1 automated.xlsx", "./data/shCAPN1 corrected.xlsx"]
+shCAPN1_filepaths = ["./data/shCAPN1 manual Aviv.xlsx", "./data/shCAPN1 automated.xlsx", "./data/shCAPN1 corrected.xlsx"]
 shCAPN1_dataset = import_data_list(shCAPN1_filepaths)
 # %%
-sample1 = np.array(fed_fast_dataset[0].iloc[:,0], dtype = np.float32)
-sample2 = np.array(fed_fast_dataset[0].iloc[:,1], dtype = np.float32)
+fig = plot_experiment_histograms(fed_fast_dataset)
+#plt.savefig("./figures/figure3B.png")
 # %%
-fed_fast_dataset[0].columns
+fig = plot_experiment_histograms(shLacz_dataset)
+#plt.savefig("./figures/figure5B.png")
+# %%
+fig = plot_experiment_histograms(shCAPN1_dataset)
+#plt.savefig("./figures/figure4B.png")
+# %%
+sample1, sample2 = df_columns_to_arrays(fed_fast_dataset[0])
+
+# %%
+import scipy.stats as scstats
+scstats.ks_2samp(sample1, sample2)
+# %%
+KS_statistic(sample1, sample2)
 # %%
 output = bootstrap_confidence_interval(sample1, descr_stat_func["mean"], 20000, CI_algorithm = "BCa")
 # %%
 stat = Statistic(*output, "mean")
 print(stat)
+
 # %%
 def _calculate_stat_diff(statistic1, statistic2):
     val1 = statistic1.value
     val2 = statistic2.value
     return 100*(val2 - val1)/val1
 
-def calculate_descr_stat_comparison(dataframe, statistic = "mean", bootstrap_sample_nb = 20000, random_seed = 10):
+def descr_stat_comparison_table(dataframe, statistic = "mean", bootstrap_sample_nb = 20000, random_seed = 10):
     # Assume first column corresponds to the control
     sample1 = np.array(dataframe.iloc[:,0], dtype = np.float32)
     sample2 = np.array(dataframe.iloc[:,1], dtype = np.float32)
-    group_names = list(dataframe.columns)
+    col_names = list(dataframe.columns)
 
     np.random.seed(random_seed)
     stat_func = descr_stat_func[statistic]
 
-    out1 = bootstrap_confidence_interval(sample1, stat_func, 20000, CI_algorithm = "BCa")
-    out2 = bootstrap_confidence_interval(sample2, stat_func, 20000, CI_algorithm = "BCa")
+    out1 = bootstrap_confidence_interval(sample1, stat_func, 20000, CI_algorithm = "BCa", random_seed = random_seed)
+    out2 = bootstrap_confidence_interval(sample2, stat_func, 20000, CI_algorithm = "BCa", random_seed = random_seed)
     stat1, stat2 = Statistic(*out1, statistic), Statistic(*out2, statistic)
     diff = _calculate_stat_diff(stat1, stat2)
-
-    col_names = group_names.append("Change")
-    result_df = pd.DataFrame([[str(stat1), str(stat2), f"{diff} :.2f"]], columns = col_names)
+    
+    col_names.append("Change (%)")
+    result_df = pd.DataFrame([[str(stat1), str(stat2), f"{diff :.2f}"]])
+    result_df.columns = col_names
+    result_df.index = [statistic.capitalize()]
     return result_df
+
 # %%
-df = calculate_descr_stat_comparison(fed_fast_dataset[0])
+from matplotlib.patches import Rectangle
+def plot_experiment_comparision_histogram(ax, dataframe):
+ 
+    ax = plot_histogram(dataframe, ax, bins = "doane")
+    ax.legend()
+    ax.set_xlabel("Fiber size ($\mu m^2 \\times 100$)")
+    ax.set_ylabel("Fiber number probability")
+
+    statistic_names = ["median", "mean", "stdev", "skewness"]
+    df = pd.concat([descr_stat_comparison_table(dataframe, stat) for stat in statistic_names])
+    tbl = pd.plotting.table(ax, df, loc = "bottom", cellLoc = "center", bbox=[0.0, -0.6, 1.0, 0.4])
+    
+    tbl.auto_set_font_size(False)
+    #tbl.set_fontsize(14)
+    tbl.scale(1, 5)
+    tbl.auto_set_column_width([0, 1, 2, 3])
+    return ax
 # %%
-df
+def descriptive_stat_table(dataframe):
+    statistic_names = ["median", "mean", "stdev", "skewness"]
+    descr_stat_table = pd.concat([descr_stat_comparison_table(dataframe, stat) for stat in statistic_names])
+    return descr_stat_table
+# %%
+out = descriptive_stat_table(shLacz_dataset[2])
+out.to_csv("./figures/shLacz_corrected.csv")
+# %%
+shLacz_dataset[2].shape
+# %%
+dataset = fed_fast_dataset[0]
+fig, ax = plt.subplots(figsize = (10, 10))
+ax = plot_experiment_comparision_histogram(ax, dataset)
+ax.set_title("Manual analysis")
+plt.tight_layout()
+#plt.savefig("./figures/fed-fast_manual.png")
+# %%
+dataset = shCAPN1_dataset[0]
+fig, ax = plt.subplots(figsize = (10, 10))
+ax = plot_experiment_comparision_histogram(ax, dataset)
+ax.set_title("Manual analysis")
+plt.tight_layout()
+plt.savefig("./figures/shCAPN1_manualAviv.png")
+# %%
+dataset = shLacz_dataset[3]
+fig, ax = plt.subplots(figsize = (10, 10))
+ax = plot_experiment_comparision_histogram(ax, dataset)
+ax.set_title("Imaris - corrected (Nadav)")
+plt.tight_layout()
+plt.savefig("./figures/shLacz_correctedAviv.png")
 # %%
 def plot_empirical_distribution(dataframe_list, labels, density = True):
     x_scale = 100
@@ -96,70 +159,60 @@ fig, axes = plot_empirical_distribution(fed_fast_dataset, labels = ["manual", "a
 #plt.savefig("./figures/fed_fast - empirical probability distribution.png")
 
 # %%
-from statsmodels.graphics import gofplots
-import statsmodels.tools as smtools
-import scipy.stats as scstats
-
-def calculate_QQplot(data1, data2, a = 0):
-    def _sample_quantiles(data):
-        probplot = gofplots.ProbPlot(np.array(data, dtype = float), a = a)
-        return probplot.sample_quantiles
-    
-    def _match_quantile_probabilities(quantiles1, quantiles2):
-        if len(quantiles1) > len(quantiles2):
-            quantiles2, quantiles1 = _match_quantile_probabilities(quantiles2, quantiles1)
-        else:
-            N_obs = len(quantiles1)
-            probs = gofplots.plotting_pos(N_obs, a)
-            quantiles2 = scstats.mstats.mquantiles(quantiles2, probs)
-        
-        return quantiles1, quantiles2
-
-    s1, s2 = _sample_quantiles(data1), _sample_quantiles(data2)
-    s1, s2 = _match_quantile_probabilities(s1, s2)
-    
-    linreg_result = sm.OLS(s1, smtools.tools.add_constant(s2)).fit()
-    s2_fitted = linreg_result.fittedvalues
-    r = np.sqrt(linreg_result.rsquared)
-    
-    return s1, s2, s2_fitted, r
 # %%
-def plot_QQplot(dataframe1, dataframe2, labels):
-    experiment_names = list(map(str.capitalize, dataframe1.columns))
-    fig, axes = plt.subplots(1, 2, figsize = (16, 6))
-
-    for i, ax in enumerate(axes):
-        s1, s2, s2_fitted, r = calculate_QQplot(dataframe1.iloc[:, i], dataframe2.iloc[:, i])
-        
-        ax.scatter(s2, s1, label = "Q-Q plot")
-        ax.plot(s2, s2_fitted, 'r-', label = f"linear fit: $r = {r :.3f}$")
-        ax.plot(s2, s2, 'k--', label = "$y = x$")
-
-        x_scale = 100
-        x_ticks = ticker.FuncFormatter(lambda x, pos: f"{x/x_scale :0g}")
-        ax.xaxis.set_major_formatter(x_ticks)
-        ax.yaxis.set_major_formatter(x_ticks)
-        #ax.set_xlim((150, 7500))
-        #ax.set_ylim((0, 7500))
-        
-        ax.legend()
-        ax.set_xlabel(f"{labels[0]} quantile ($\mu m^2 \\times 100$)")
-        ax.set_ylabel(f"{labels[1]} quantile ($\mu m^2 \\times 100$)")
-        ax.set_title(f"{experiment_names[i]}")
-
-        fig.suptitle(f"Q-Q plot between the {labels[0]} and {labels[1]} distributions")
-        plt.tight_layout()
-
-    return fig, axes
-
-
-# %%
-fig, axes = plot_QQplot(fed_fast_dataset[0], fed_fast_dataset[1], ["Manual", "Automated"])
-#plt.savefig("./figures/fed_fast - automated QQplot.png")
+fig = plot_QQplot_comparison(fed_fast_dataset, ["Manual", "Automated", "Corrected"])
+##plt.savefig("./figures/figure3C.png")
 
 # %%
 fig, axes = plot_QQplot(fed_fast_dataset[0], fed_fast_dataset[2], ["Manual", "Corrected"])
 #plt.savefig("./figures/fed_fast - corrected QQplot.png")
+# %%
+def bootstrap_A_from_df(dataframe, random_seed = 10):
+    data_arrays = df_columns_to_arrays(dataframe)
+    bootstrap_result = bootstrap_confidence_interval_2samp(*data_arrays, A_statistic, B = 20000, CI_algorithm = "BCa", random_seed = random_seed)
+    return Statistic(*bootstrap_result, "A statistic")
+# %%
+dataset = shCAPN1_dataset
+A_stats = [bootstrap_A_from_df(df) for df in dataset]
+exp_labels = ["Manual", "Automated", "Corrected"]
+A_val = np.array([A.value for A in A_stats])
+A_err = np.array([A.errorbar() for A in A_stats]).T
+
+# %%
+def plot_statistics_bar(values, errors, experiment_labels, statistic_name, p_values, star_offset = 0.4):
+    x = np.arange(len(A_stats))
+
+    fig, ax = plt.subplots(1, 1, figsize = (4, 4))
+    ax.bar(x, values, yerr = errors, color = "mediumslateblue", edgecolor = "black", capsize = 4.0)
+    #ax.axhline(y = 0.5, linestyle = "--", color = "firebrick", linewidth = 2.0, alpha = 0.7)
+    
+    ax.set_xticks(x)
+    ax.set_xticklabels(experiment_labels, fontsize = "small")
+    ax.set_ylabel(statistic_name)
+    for i, p in enumerate(p_values):
+        if p < 0.001:
+            ax.text(i, values[i]+star_offset, "***", horizontalalignment = "center")
+    ax.grid(alpha = 0.3)
+    ax.set_ylim((0, 0.25))
+    fig.tight_layout()
+    return fig
+# %%
+p_vals = [0, 0.86, 0]
+fig = plot_statistics_bar(A_val, A_err, exp_labels, "A statistic", p_vals)
+#plt.savefig("./figures/figure4C.png")
+# %%
+p_vals = [0.94, 0, 0.33]
+fig = plot_statistics_bar(A_val, A_err, exp_labels, "A statistic", p_vals)
+#plt.savefig("./figures/figure5C.png")
+# %%
+import scipy.stats as scstats
+dataset = shLacz_dataset
+KS_test_results = np.array([scstats.ks_2samp(*df_columns_to_arrays(df)) for df in dataset])
+KS_vals = KS_test_results[:,0]
+p_vals = KS_test_results[:,1]
+
+fig = plot_statistics_bar(KS_vals, None, exp_labels, "KS statistic", p_vals, 0.1)
+plt.savefig("./figures/figure5D.png")
 # %%
 sample1 = np.array(fed_fast_dataset[0].iloc[:,0], dtype = float)
 sample2 = np.array(fed_fast_dataset[0].iloc[:,1], dtype = float)
@@ -167,22 +220,47 @@ ks, p = scstats.ks_2samp(sample1, sample2)
 # %%
 es, p = scstats.epps_singleton_2samp(sample1, sample2)
 # %%
-ks
+p_vals
 # %%
 p
 # %%
 scstats.mstats.spearmanr(sample1, sample2)
 # %%
-data_ind = 0
+data_ind = 3
 sample1, sample2 = shLacz_dataset[data_ind].iloc[:,0], shLacz_dataset[data_ind].iloc[:,1]
+sample1, sample2 = np.array(sample1, np.float32), np.array(sample2, np.float32)
 scstats.mstats.brunnermunzel(sample1, sample2, alternative = "two-sided", distribution = "normal")
+A_statistic(sample1, sample2)
 # %%
-calculate_effect_size(sample1, sample2)
+output = bootstrap_confidence_interval_2samp(sample1, sample2, A_statistic, B = 20000, CI_algorithm = "BCa")
+#%%
+stat = Statistic(*output, "A_statistic")
+print(stat)
 # %%
-sample1, sample2 = shCAPN1_dataset[0].iloc[:,0], shCAPN1_dataset[0].iloc[:,1]
+data_ind = 2
+sample1, sample2 = fed_fast_dataset[data_ind].iloc[:,0], fed_fast_dataset[data_ind].iloc[:,1]
+sample1, sample2 = np.array(sample1, np.float32), np.array(sample2, np.float32)
+scstats.mstats.brunnermunzel(sample1, sample2, alternative = "greater", distribution = "normal")
+# %%
+A_statistic(sample1, sample2)
+# %%
+output = bootstrap_confidence_interval_2samp(sample1, sample2, A_statistic, B = 20000, CI_algorithm = "BCa")
+#%%
+stat = Statistic(*output, "A_statistic")
+print(stat)
+# %%
+data_ind = 3
+sample1, sample2 = shCAPN1_dataset[data_ind].iloc[:,0], shCAPN1_dataset[data_ind].iloc[:,1]
+sample1, sample2 = np.array(sample1, np.float32), np.array(sample2, np.float32)
 scstats.mstats.brunnermunzel(sample1, sample2, alternative = "less", distribution = "normal")
 # %%
-calculate_effect_size(sample1, sample2)
+A_statistic(sample1, sample2)
+# %%
+output = bootstrap_confidence_interval_2samp(sample1, sample2, A_statistic, B = 20000, CI_algorithm = "BCa")
+#%%
+stat = Statistic(*output, "A_statistic")
+print(stat)
+
 # %%
 sample1, sample2 = shLacz_dataset[0].iloc[:,0], shLacz_dataset[0].iloc[:,1]
 sample1, sample2 = np.array(sample1, dtype = float), np.array(sample2, dtype = float)
@@ -236,26 +314,7 @@ sample2 = np.array(fed_fast_dataset[2].iloc[:, col_ind], dtype = float)
 wdist1 = scstats.wasserstein_distance(sample0, sample1)
 wdist2 = scstats.wasserstein_distance(sample0, sample2)
 
-# %%
-sample = fed_fast_dataset[1].iloc[:,0]
-sample = np.array(sample, dtype = np.float32)
-# %%
-calculate_bootstrap_CI(np.mean, sample, N_bootstrap = 100000)
-# %%
-calculate_bootstrap_CI(np.median, sample, N_bootstrap = 100000)
-# %%
-calculate_bootstrap_CI(scstats.tstd, sample, N_bootstrap = 100000)
-# %%
-calculate_bootstrap_CI(scstats.skew, sample, N_bootstrap = 100000)
-# %%
-true_mean = np.mean(sample0)
-mean_dist = np.mean(boot0, axis = 1)
-# %%
-print(true_mean)
-print(np.mean(mean_dist))
-# %%
-print(np.std(sample0)/np.sqrt(len(sample0)))
-print(scstats.tstd(mean_dist))
+
 # %%
 edist1 = scstats.energy_distance(sample0, sample1)
 edist2 = scstats.energy_distance(sample0, sample2)
@@ -310,205 +369,16 @@ plt.tight_layout()
 # %%
 
 # %%
-from matplotlib.patches import Rectangle
-def plot_experiment_comparision_histogram(ax, dataframe):
-    x_scale = 100
-    x_ticks = ticker.FuncFormatter(lambda x, pos: f"{x/x_scale :0g}")
-    hist_kwargs = {"edgecolor": "black"}
 
-    #ax.plot([], [], ' ', label = f"""{"" :8s} Skewness""")
-    #label = _make_label(dataframe)
-    ax.hist(dataframe.values, label = dataframe.columns, bins = 18, density = True, rwidth = 0.7, **hist_kwargs)
-    
-    ax.xaxis.set_major_formatter(x_ticks)
-    ax.ticklabel_format(axis = "y", style = "sci", scilimits = (0, 0))
-    #ax.set_xlim((0, 9000))
-    ax.legend()
-
-    ax.set_xlabel("Fiber size ($\mu m^2 \\times 100$)")
-    ax.set_ylabel("Fiber number probability")
-
-    return ax
-
-def plot_descr_stats_comparison_table(ax, dataframe, statistics_names):
-   
-    output = pd.concat([calculate_descriptive_stats(dataframe, i) for i in range(dataframe.shape[1])], axis = 1) 
-    data = output.loc[statistics_names].values
-        
-    table = ax.table(cellText = np.around(data, 2), colLabels = dataframe.columns, rowLabels = statistics_names, loc = "center", cellLoc = "center")
-    table.scale(1, 2.5)
-    table.set_fontsize(16)
-
-    ax.axis("off")
-    #ax.axis("tight")
-    
-    return ax
-
-def plot_experiment_comparision(dataframe, statistics_names, figsize = (10, 5)):
-    fig, axes = plt.subplots(1, 2, figsize = figsize, gridspec_kw = {"width_ratios": [1.5, 1]})
-    
-    axes[0] = plot_experiment_comparision_histogram(axes[0], dataframe)
-    axes[1] = plot_descr_stats_comparison_table(axes[1], dataframe, statistics_names)
-    return fig, axes
-
-def _make_label(dataframe):
-    labels = []
-    for i, exp_name in enumerate(dataframe.columns):
-        skew = calculate_descriptive_stats(dataframe, i).loc["skew"]
-        label_string = f"{str.capitalize(exp_name) :9s}  {skew[0] :.2f}"
-        labels.append(label_string)
-    return labels
-# %%
-fig, ax = plot_experiment_comparision_histogram(fed_fast_dataset[0])
-ax.set_title("Distributions for the manual analysis")
-plt.tight_layout()
-# %%
-calculate_descriptive_stats(fed_fast_dataset[0], 0).loc["skew"].values
-# %%
-fig, ax = plot_descr_stats_comparison_table(fed_fast_dataset[0], stat_names)
-plt.tight_layout()
-# %%
-fig, axes = plot_experiment_comparision(fed_fast_dataset[0], stat_names)
-fig.suptitle("Comparison of distributions for the manual analysis of the fed-fast experiment")
-plt.tight_layout()
-#plt.savefig("./figures/fed-fast_manual.png")
-# %%
-fig, axes = plot_experiment_comparision(fed_fast_dataset[1], stat_names)
-fig.suptitle("Comparison of distributions for the automated analysis of the fed-fast experiment")
-plt.tight_layout()
-#plt.savefig("./figures/fed-fast_automated.png")
-# %%
-fig, axes = plot_experiment_comparision(fed_fast_dataset[2], stat_names)
-fig.suptitle("Comparison of distributions for the corrected analysis of the fed-fast experiment")
-plt.tight_layout()
-plt.savefig("./figures/fed-fast_corrected.png")
 
 # %%
-def plot_comparison_QQplot(dataframe):
-   
-    fig, ax = plt.subplots(1, 1, figsize = (6, 5))
-
-    s1, s2, s2_fitted, r = calculate_QQplot(dataframe.iloc[:, 0], dataframe.iloc[:, 1])
-        
-    ax.scatter(s2, s1, label = "Q-Q plot")
-    ax.plot(s2, s2_fitted, 'r-', label = f"linear fit: $r = {r :.3f}$")
-    ax.plot(s2, s2, 'k--', label = "$y = x$")
-
-    x_scale = 100
-    x_ticks = ticker.FuncFormatter(lambda x, pos: f"{x/x_scale :0g}")
-    ax.xaxis.set_major_formatter(x_ticks)
-    ax.yaxis.set_major_formatter(x_ticks)
-    #ax.set_xlim((150, 7500))
-    #ax.set_ylim((0, 7500))
-
-    labels = list(map(str.lower, dataframe.columns))
-    ax.legend()
-    ax.set_xlabel(f"Quantiles: {labels[0]} ($\mu m^2 \\times 100$)")
-    ax.set_ylabel(f"Quantiles: {labels[1]} ($\mu m^2 \\times 100$)")
-
-    return fig, ax
-
-# %%
-fig, ax = plot_comparison_QQplot(fed_fast_dataset[0])
+fig, ax = plt.subplots(figsize = (5, 5))
+ax = plot_QQ(*df_columns_to_arrays(fed_fast_dataset[0]))
 ax.set_title("Q-Q plot for the manual analysis")
+ax.set_xlabel("Quantiles: Fed")
+ax.set_ylabel("Quantiles: Fasted")
 plt.tight_layout()
 #plt.savefig("./figures/fed_fast - QQplot manual.png")
-# %%
-fig, ax = plot_comparison_QQplot(fed_fast_dataset[1])
-ax.set_title("Q-Q plot for the automated analysis")
-plt.tight_layout()
-#plt.savefig("./figures/fed_fast - QQplot automated.png")
-# %%
-fig, ax = plot_comparison_QQplot(fed_fast_dataset[2])
-ax.set_title("Q-Q plot for the corrected analysis")
-plt.tight_layout()
-#plt.savefig("./figures/fed_fast - QQplot corrected.png")
-# %%
-
-# %%
-fig, axes = plot_experiment_comparision(shLacz_dataset[0], stat_names, figsize = (12, 5))
-fig.suptitle("Comparison of distributions for the manual analysis of the shLacz experiment")
-fig.tight_layout()
-#plt.savefig("./figures/shLacz_manual.png")
-# %%
-fig, axes = plot_experiment_comparision(shLacz_dataset[1], stat_names, figsize = (12, 5))
-fig.suptitle("Comparison of distributions for the automated analysis of the shLacz experiment")
-fig.tight_layout()
-#plt.savefig("./figures/shLacz_automated.png")
-# %%
-fig, axes = plot_experiment_comparision(shLacz_dataset[2], stat_names, figsize = (12, 5))
-fig.suptitle("Comparison of distributions for the corrected(Aviv) analysis of the shLacz experiment")
-fig.tight_layout()
-#plt.savefig("./figures/shLacz_correctedAviv.png")
-# %%
-# %%
-fig, axes = plot_experiment_comparision(shLacz_dataset[3], stat_names, figsize = (12, 5))
-fig.suptitle("Comparison of distributions for the corrected(Nadav) analysis of the shLacz experiment")
-fig.tight_layout()
-plt.savefig("./figures/shLacz_correctedNadav.png")
-# %%
-fig, ax = plot_comparison_QQplot(shLacz_dataset[0])
-ax.set_title("Q-Q plot for the manual analysis")
-plt.tight_layout()
-#plt.savefig("./figures/shLacz - QQplot manual.png")
-# %%
-fig, ax = plot_comparison_QQplot(shLacz_dataset[1])
-ax.set_title("Q-Q plot for the automated analysis")
-plt.tight_layout()
-plt.savefig("./figures/shLacz - QQplot automated.png")
-# %%
-fig, ax = plot_comparison_QQplot(shLacz_dataset[2])
-ax.set_title("Q-Q plot for the corrected(Aviv) analysis")
-plt.tight_layout()
-plt.savefig("./figures/shLacz - QQplot correctedAviv.png")
-# %%
-fig, ax = plot_comparison_QQplot(shLacz_dataset[3])
-ax.set_title("Q-Q plot for the corrected(Nadav) analysis")
-plt.tight_layout()
-plt.savefig("./figures/shLacz - QQplot correctedNadav.png")
-# %%
-
-# %%
-fig, axes = plot_experiment_comparision(shCAPN1_dataset[0], stat_names, figsize = (12, 5))
-fig.suptitle("Comparison of distributions for the manual(Aviv) analysis of the shCAPN1 experiment")
-fig.tight_layout()
-plt.savefig("./figures/shCAPN1_manualAviv.png")
-# %%
-fig, axes = plot_experiment_comparision(shCAPN1_dataset[1], stat_names, figsize = (12, 5))
-fig.suptitle("Comparison of distributions for the manual(Nadav) analysis of the shCAPN1 experiment")
-fig.tight_layout()
-plt.savefig("./figures/shCAPN1_manualNadav.png")
-# %%
-fig, axes = plot_experiment_comparision(shCAPN1_dataset[2], stat_names, figsize = (12, 5))
-fig.suptitle("Comparison of distributions for the automated analysis of the shCAPN1 experiment")
-fig.tight_layout()
-plt.savefig("./figures/shCAPN1_automated.png")
-# %%
-fig, axes = plot_experiment_comparision(shCAPN1_dataset[3], stat_names, figsize = (12, 5))
-fig.suptitle("Comparison of distributions for the corrected analysis of the shCAPN1 experiment")
-fig.tight_layout()
-plt.savefig("./figures/shCAPN1_corrected.png")
-
-# %%
-fig, ax = plot_comparison_QQplot(shCAPN1_dataset[0])
-ax.set_title("Q-Q plot for the manual(Aviv) analysis")
-plt.tight_layout()
-plt.savefig("./figures/shCAPN1 - QQplot manualAviv.png")
-# %%
-fig, ax = plot_comparison_QQplot(shCAPN1_dataset[1])
-ax.set_title("Q-Q plot for the manual(Nadav) analysis")
-plt.tight_layout()
-plt.savefig("./figures/shCAPN1 - QQplot manualNadav.png")
-# %%
-fig, ax = plot_comparison_QQplot(shCAPN1_dataset[2])
-ax.set_title("Q-Q plot for the automated analysis")
-plt.tight_layout()
-plt.savefig("./figures/shCAPN1 - QQplot automated.png")
-# %%
-fig, ax = plot_comparison_QQplot(shCAPN1_dataset[3])
-ax.set_title("Q-Q plot for the corrected analysis")
-plt.tight_layout()
-plt.savefig("./figures/shCAPN1 - QQplot corrected.png")
 # %%
 k, _ = scstats.ks_2samp(sample0, sample1)
 k

@@ -4,11 +4,13 @@ from numba import jit, float32, prange, int64
 
 from statistics import normal_cdf, normal_ppf
 
+from numpy.random import rand
+
 ## API level functions 
-def bootstrap_confidence_interval(sample, stat_func, B = 10000, confidence_level = 0.95, CI_algorithm = "basic"):
+def bootstrap_confidence_interval(sample, stat_func, B = 10000, confidence_level = 0.95, CI_algorithm = "basic", random_seed = 10):
     sample_stat = stat_func(sample)
     bootstrap_func = bootstrap_factory(stat_func)
-    bootstrap_dist = bootstrap_func(sample, B)
+    bootstrap_dist = bootstrap_func(sample, B, random_seed)
 
     if CI_algorithm == "basic":
         CI = _calculate_CI_basic(sample_stat, bootstrap_dist, confidence_level)
@@ -20,10 +22,10 @@ def bootstrap_confidence_interval(sample, stat_func, B = 10000, confidence_level
     
     return sample_stat, CI
 
-def bootstrap_confidence_interval_2samp(sample1, sample2, stat_func_2samp, B = 10000, confidence_level = 0.95, CI_algorithm = "basic"):
+def bootstrap_confidence_interval_2samp(sample1, sample2, stat_func_2samp, B = 10000, confidence_level = 0.95, CI_algorithm = "basic", random_seed = 10):
     sample_stat = stat_func_2samp(sample1, sample2)
     bootstrap_func_2samp = bootstrap_factory_2samp(stat_func_2samp)
-    bootstrap_dist = bootstrap_func_2samp(sample1, sample2, B)
+    bootstrap_dist = bootstrap_func_2samp(sample1, sample2, B, random_seed)
 
     if CI_algorithm == "basic":
         CI = _calculate_CI_basic(sample_stat, bootstrap_dist, confidence_level)
@@ -41,8 +43,9 @@ def bootstrap_confidence_interval_2samp(sample1, sample2, stat_func_2samp, B = 1
 def bootstrap_factory(stat_func):
     # stat_func must be a one-sample statistical function with signature float32[:] -> float32
     # it must also be compatible with numpy & numba
-    @jit("float32[:](float32[:], int64)", nopython = True, parallel = True)
-    def bootstrap_func(sample, B):
+    @jit("float32[:](float32[:], int64, int64)", nopython = True, parallel = True)
+    def bootstrap_func(sample, B, random_seed):
+        np.random.seed(random_seed)
         bootstrap_dist = []
         for i in prange(B):
             resample = np.random.choice(sample, size = sample.shape)
@@ -67,8 +70,9 @@ def jackknife_factory(stat_func):
 def bootstrap_factory_2samp(stat_func_2samp):
     # stat_func must be a one-sample statistical function with signature float32[:] -> float32
     # it must also be compatible with numpy & numba
-    @jit("float32[:](float32[:], float32[:], int64)", nopython = True, parallel = True)
-    def bootstrap_func_2samp(sample1, sample2, B):
+    @jit("float32[:](float32[:], float32[:], int64, int64)", nopython = True, parallel = True)
+    def bootstrap_func_2samp(sample1, sample2, B, random_seed):
+        np.random.seed(random_seed)
         bootstrap_dist = []
         for i in prange(B):
             resample1 = np.random.choice(sample1, size = sample1.shape)
