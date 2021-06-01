@@ -31,7 +31,7 @@ def plot_histogram(dataframe, ax = None, **hist_kwargs):
     labels = list(dataframe.columns)
     ax = configure_axis(ax)
     
-    ax.hist(counts, label = labels, density = True, color = ["navy", "orangered"], edgecolor = "black", **hist_kwargs)
+    ax.hist(counts, label = labels, density = True, color = ["midnightblue", "palegreen"], edgecolor = "black", **hist_kwargs)
 
     ax.xaxis.set_major_formatter(scaled_tick_format(scale = 100))
     ax.yaxis.set_major_formatter(SciNotationFormatter(-4, "%1.1f"))

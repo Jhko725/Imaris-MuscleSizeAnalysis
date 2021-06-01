@@ -179,30 +179,36 @@ A_val = np.array([A.value for A in A_stats])
 A_err = np.array([A.errorbar() for A in A_stats]).T
 
 # %%
-def plot_statistics_bar(values, errors, experiment_labels, statistic_name, p_values, star_offset = 0.4):
+from matplotlib import ticker
+def plot_statistics_bar(values, errors, experiment_labels, experiment_name, statistic_name, p_values):
     x = np.arange(len(A_stats))
-
+    
     fig, ax = plt.subplots(1, 1, figsize = (4, 4))
-    ax.bar(x, values, yerr = errors, color = "mediumslateblue", edgecolor = "black", capsize = 4.0)
-    #ax.axhline(y = 0.5, linestyle = "--", color = "firebrick", linewidth = 2.0, alpha = 0.7)
+    ax.bar(x, values, yerr = errors, color = "palegreen", edgecolor = "black", capsize = 4.0)
+    ax.axhline(y = 0.5, linestyle = "--", color = "firebrick", linewidth = 2.0, alpha = 0.8)
     
     ax.set_xticks(x)
     ax.set_xticklabels(experiment_labels, fontsize = "small")
-    ax.set_ylabel(statistic_name)
+    ax.set_ylabel(f"{statistic_name}\n(non-transfected vs {experiment_name})", fontsize = "small")
+    y_lim = (0, 1)
     for i, p in enumerate(p_values):
         if p < 0.001:
-            ax.text(i, values[i]+star_offset, "***", horizontalalignment = "center")
+            ax.text(i, 0.65*y_lim[1], "***", horizontalalignment = "center")
     ax.grid(alpha = 0.3)
-    ax.set_ylim((0, 0.25))
+    ax.set_ylim(y_lim)
+    ax.text(0.4, 0.82*y_lim[1], "***: $p < 0.001$ for the\nBrunner-Munzel test", fontsize = "small", horizontalalignment = "left", bbox = {"facecolor": "none", "edgecolor": "lightgrey"})
+    #major_tick_loc = ticker.MultipleLocator(base = 0.05)
+    #ax.yaxis.set_major_locator(major_tick_loc)
+
     fig.tight_layout()
     return fig
 # %%
 p_vals = [0, 0.86, 0]
-fig = plot_statistics_bar(A_val, A_err, exp_labels, "A statistic", p_vals)
+fig = plot_statistics_bar(A_val, A_err, exp_labels, "shCAPN1", "A statistic", p_vals)
 #plt.savefig("./figures/figure4C.png")
 # %%
 p_vals = [0.94, 0, 0.33]
-fig = plot_statistics_bar(A_val, A_err, exp_labels, "A statistic", p_vals)
+fig = plot_statistics_bar(A_val, A_err, exp_labels, "shLacz", "A statistic", p_vals)
 #plt.savefig("./figures/figure5C.png")
 # %%
 import scipy.stats as scstats
@@ -211,8 +217,8 @@ KS_test_results = np.array([scstats.ks_2samp(*df_columns_to_arrays(df)) for df i
 KS_vals = KS_test_results[:,0]
 p_vals = KS_test_results[:,1]
 
-fig = plot_statistics_bar(KS_vals, None, exp_labels, "KS statistic", p_vals, 0.1)
-plt.savefig("./figures/figure5D.png")
+fig = plot_statistics_bar(KS_vals, None, exp_labels, "shLacz", "KS statistic", p_vals)
+#plt.savefig("./figures/figure5D.png")
 # %%
 sample1 = np.array(fed_fast_dataset[0].iloc[:,0], dtype = float)
 sample2 = np.array(fed_fast_dataset[0].iloc[:,1], dtype = float)
@@ -262,49 +268,11 @@ stat = Statistic(*output, "A_statistic")
 print(stat)
 
 # %%
-sample1, sample2 = shLacz_dataset[0].iloc[:,0], shLacz_dataset[0].iloc[:,1]
-sample1, sample2 = np.array(sample1, dtype = float), np.array(sample2, dtype = float)
-scstats.epps_singleton_2samp(sample1, sample2)
+
 
 # %%
-data_ind = 1
-sample1, sample2 = shLacz_dataset[data_ind].iloc[:,0], shLacz_dataset[data_ind].iloc[:,1]
-scstats.ks_2samp(sample1, sample2)
 # %%
 
-import statsmodels.stats as ststats
-
-def calculate_descriptive_stats(dataframe, column_index):
-    data_array = np.array(dataframe.iloc[:, column_index], dtype = float)
-    des_stats = ststats.descriptivestats.describe(data_array)
-    return des_stats
-
-def plot_descr_stats_table(dataframe_list, label_list, statistics_names):
-    fig, axes = plt.subplots(1, 2, figsize = (10, 3.5))
-    exp_names = dataframe_list[0].columns
-
-    for i, ax in enumerate(axes):
-        output = pd.concat([calculate_descriptive_stats(df, i) for df in dataframe_list], axis = 1) 
-        data = output.loc[statistics_names].values
-        table = ax.table(cellText = np.around(data, 2), colLabels = label_list, rowLabels = statistics_names, loc = "center", cellLoc = "center")
-        table.scale(1, 2)
-
-        ax.axis("off")
-        ax.axis("tight")
-        ax.set_title(exp_names[i])
-    
-    return fig, axes
-# %%
-ststats.descriptivestats.describe(sample0)
-# %%
-
-# %%
-labels = ["Manual", "Automated", "Corrected"]
-stat_names = ["median", "mean", "std", "skew"]
-fig, axes = plot_descr_stats_table(fed_fast_dataset, labels, stat_names)
-fig.suptitle("Descriptive statistics for mouse muscle fiber size distribution")
-plt.tight_layout()
-#plt.savefig("./figures/fed_fast - descrptive statistics.png")
 # %%
 col_ind = 1
 sample0 = np.array(fed_fast_dataset[0].iloc[:, col_ind], dtype = float)
@@ -407,4 +375,146 @@ ax.set_xlim((-5, 5))
 ax.set_ylim((-0.01, 1))
 ax.legend()
 plt.savefig("./figures/distribution_skew.png")
+# %%
+import matplotlib.pyplot as plt
+import scipy.stats as scstats
+
+def Supplementary_Figure1A():
+    x = np.linspace(-4, 4, 100)
+    norm1 = scstats.norm(scale = 0.5)
+    norm2 = scstats.norm(scale = 1.0)
+    
+    fig, ax = plt.subplots(1, 1, figsize = (7, 5))
+    ax.plot(x, norm1.pdf(x), linewidth = 2.0)
+    ax.fill_between(x, norm1.pdf(x), alpha = 0.5, label = "Method 1: $N(0, 0.5^2)$")
+    ax.plot(x, norm2.pdf(x), linewidth = 2.0)
+    ax.fill_between(x, norm2.pdf(x), alpha = 0.5, label = "Method 2: $N(0, 1^2)$")
+    
+    #ax.axvline(x = 0.0, color = "black", linewidth = 2.0, linestyle = "--", alpha = 0.4)
+    ax.text(0.0, 0.9, "Identical means (0.0)\nDifferent stdev (0.5 vs 1.0)", horizontalalignment = "center", fontsize = "small")
+    
+    ax.set_ylim((0, 1.5))
+    ax.set_xlim((-5, 5))
+    
+    ax.grid(alpha = 0.4)
+    ax.legend(fontsize = "small")
+    
+    return fig
+fig = Supplementary_Figure1A()
+#plt.savefig("./figures/supplementary_figure1A.png")
+# %%
+def Supplementary_Figure1B():
+    x = np.linspace(-5, 5, 100)
+    sigma1, sigma2 = 0.5, 2.0
+    ratio = 0.4
+    norm1_1 = scstats.norm(scale = sigma1)
+    norm1_2 = scstats.norm(scale = sigma2)
+    var = ratio*sigma1**2+(1-ratio)*sigma2**2
+    sigma = np.sqrt(var)
+    norm2 = scstats.norm(scale = sigma)
+    y1 = ratio*norm1_1.pdf(x)+(1-ratio)*norm1_2.pdf(x)
+    y2 = norm2.pdf(x)
+    fig, ax = plt.subplots(1, 1, figsize = (7, 5))
+    ax.plot(x, y1, linewidth = 2.0)
+    ax.fill_between(x, y1, alpha = 0.5, label = f"Method 1: ${ratio} \cdot N(0, {sigma1}^2)+{1-ratio} \cdot N(0, {sigma2}^2)$")
+    ax.plot(x, y2, linewidth = 2.0)
+    ax.fill_between(x, y2, alpha = 0.5, label = f"Method 2: $N(0, {var})$")
+    
+    #ax.axvline(x = 0.0, color = "black", linewidth = 2.0, linestyle = "--", alpha = 0.4)
+    text = f"Identical means (0.0)\nIdentical medians (0.0)\nIdentical stdev ({sigma :.2f})\nIdentical skewness (0.0)"
+    ax.text(0.0, 0.5, text, horizontalalignment = "center", fontsize = "small")
+    
+    ax.set_ylim((0, 1.0))
+    ax.set_xlim((-6, 6))
+    
+    ax.grid(alpha = 0.4)
+    ax.legend(fontsize = "small")
+    
+    return fig
+fig = Supplementary_Figure1B()
+#plt.savefig("./figures/supplementary_figure1B.png")
+# %%
+def Supplementary_Figure2():
+    fig, axes = plt.subplots(1, 2, figsize = (8, 3))
+    x = np.linspace(-4, 4, 100)
+
+    def _shifted_distributions(ax):
+        Dx = 3.0
+        norm1 = scstats.norm()
+        norm2 = scstats.norm(loc = Dx)
+        y1 = norm1.pdf(x)
+        y2 = norm2.pdf(x+Dx)
+        ax.plot(x, y1)
+        ax.fill_between(x, y1, alpha = 0.5, label = 'Before')
+        ax.plot(x+Dx, y2)
+        ax.fill_between(x+Dx, y2, alpha = 0.5, label = 'After')
+        ax.set_xlim((-5, 5+Dx))
+        ax.legend()
+        return ax
+
+    def _skewed_distributions(ax):
+        dist1 = scstats.norm()
+        dist2 = scstats.gumbel_l(loc = 2.0)
+        y1 = dist1.pdf(x)
+        y2 = dist2.pdf(x)
+        ax.plot(x, y1)
+        ax.fill_between(x, y1, alpha = 0.5, label = 'Before')
+        ax.plot(x, y2)
+        ax.fill_between(x, y2, alpha = 0.5, label = 'After')
+        ax.set_xlim((-5, 5))
+        ax.legend()
+        return ax
+
+    axes[0] = _shifted_distributions(axes[0])
+    axes[0].set_title("Distribution shifted", fontsize = "medium")
+    axes[1] = _skewed_distributions(axes[1])
+    axes[1].set_title("Skewness change induced", fontsize = "medium")
+    for ax in axes:
+        ax.set_ylim((-0.01, 0.7))
+        ax.grid(alpha = 0.4)
+    return fig
+
+fig = Supplementary_Figure2()
+fig.tight_layout()
+#plt.savefig("./figures/supplementary_figure2.png")
+# %%
+def Supplementary_Figure3():
+    fig, axes = plt.subplots(1, 3, figsize = (12, 3))
+    x = np.linspace(-4, 4, 100)
+
+    sigma1, sigma2 = 1.0, 0.7
+    def _plot_double_gaussians(ax, mu1, mu2):
+        norm1 = scstats.norm(loc = mu1, scale = sigma1)
+        norm2 = scstats.norm(loc = mu2, scale = sigma2)
+        x1, x2 = x+mu1, x+mu2
+        y1, y2 = norm1.pdf(x1), norm2.pdf(x2)
+        ax.plot(x1, y1)
+        ax.fill_between(x1, y1, alpha = 0.5, label = 'Distribution 1')
+        ax.plot(x2, y2)
+        ax.fill_between(x2, y2, alpha = 0.5, label = 'Distribution 2')
+        ax.legend(fontsize = "small", loc = "upper right")
+        ax.set_ylim((0, 1.0))
+        ax.grid(alpha = 0.6)
+        return ax
+    
+    A_text_loc = (0.2, 0.8)
+    axes[0] = _plot_double_gaussians(axes[0], 0.0, 1.0)
+    axes[0].text(*A_text_loc, "$A < 0.5$", horizontalalignment = "center", fontweight = "bold", transform = axes[0].transAxes)
+    axes[0].set_title("1 is stochastically less than 2", fontsize = "small")
+
+    axes[1] = _plot_double_gaussians(axes[1], 0.0, 0.0)
+    axes[1].text(*A_text_loc, "$A = 0.5$", horizontalalignment = "center", fontweight = "bold", transform = axes[1].transAxes)
+    axes[1].set_title("1 is stochastically equal to 2", fontsize = "small")
+
+    axes[2] = _plot_double_gaussians(axes[2], 0.0, -1.0)
+    axes[2].text(*A_text_loc, "$A > 0.5$", horizontalalignment = "center", fontweight = "bold", transform = axes[2].transAxes)
+    axes[2].set_title("1 is stochastically greater than 2", fontsize = "small")
+    
+    axes[2].text(-1, 0.01, u"\u2193", color = "mediumblue", fontweight = "bold", fontsize = "large")
+    axes[2].text(0.7, 0.01, u"\u2193", color = "saddlebrown", fontweight = "bold", fontsize = "large")
+    return fig
+
+fig = Supplementary_Figure3()
+fig.tight_layout()
+#plt.savefig("./figures/supplementary_figure3.png")
 # %%
