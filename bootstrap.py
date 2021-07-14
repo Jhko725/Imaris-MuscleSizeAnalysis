@@ -31,12 +31,12 @@ def bootstrap_confidence_interval_2samp(sample1, sample2, stat_func_2samp, B = 1
         CI = _calculate_CI_basic(sample_stat, bootstrap_dist, confidence_level)
 
     elif CI_algorithm == "BCa":
-        jackknife_func_2samp = jackknife_factory_2samp(stat_func_2samp)
-        jackknife_dist1 = jackknife_func_2samp(sample1, sample2)
-        jackknife_dist2 = jackknife_func_2samp(sample2, sample1)
+        jackknife_func_2samp_1, jackknife_func_2samp_2 = jackknife_factory_2samp(stat_func_2samp)
+        jackknife_dist1 = jackknife_func_2samp_1(sample1, sample2)
+        jackknife_dist2 = jackknife_func_2samp_2(sample1, sample2)
         CI = _calculate_CI_BCa_2samp(sample_stat, bootstrap_dist, jackknife_dist1, jackknife_dist2, confidence_level)
     
-    return sample_stat, CI
+    return sample_stat, bootstrap_dist, CI
 
 ## Lower level functions
 
@@ -85,16 +85,24 @@ def bootstrap_factory_2samp(stat_func_2samp):
 
 def jackknife_factory_2samp(stat_func_2samp):
     @jit("float32[:](float32[:], float32[:])", nopython = True, parallel = True)
-    def jackknife_func_2samp(sample1, sample2):
+    def jackknife_func_2samp_1(sample1, sample2):
         # jackknifes along the first sample
-        # if need to jackknife along the second sample, call the function with arguments in reversed order
         jackknife_dist = []
         for i in prange(len(sample1)):
             jackknife_sample1 = np.concatenate((sample1[:i], sample1[i+1:]))
             jackknife_dist.append(stat_func_2samp(jackknife_sample1, sample2))
         return np.array(jackknife_dist)
 
-    return jackknife_func_2samp
+    @jit("float32[:](float32[:], float32[:])", nopython = True, parallel = True)
+    def jackknife_func_2samp_2(sample1, sample2):
+        # jackknifes along the first sample
+        jackknife_dist = []
+        for i in prange(len(sample1)):
+            jackknife_sample2 = np.concatenate((sample2[:i], sample2[i+1:]))
+            jackknife_dist.append(stat_func_2samp(sample1, jackknife_sample2))
+        return np.array(jackknife_dist)
+
+    return jackknife_func_2samp_1, jackknife_func_2samp_2
 
 
 @jit("UniTuple(float32, 2)(float32, float32[:], float32)", nopython = True)

@@ -169,43 +169,85 @@ fig, axes = plot_QQplot(fed_fast_dataset[0], fed_fast_dataset[2], ["Manual", "Co
 # %%
 def bootstrap_A_from_df(dataframe, random_seed = 10):
     data_arrays = df_columns_to_arrays(dataframe)
-    bootstrap_result = bootstrap_confidence_interval_2samp(*data_arrays, A_statistic, B = 20000, CI_algorithm = "BCa", random_seed = random_seed)
-    return Statistic(*bootstrap_result, "A statistic")
+    bootstrap_result = bootstrap_confidence_interval_2samp(data_arrays[1], data_arrays[0], A_statistic, B = 20000, CI_algorithm = "BCa", random_seed = random_seed)
+    return bootstrap_result
 # %%
-dataset = shCAPN1_dataset
+dataset = shLacz_dataset
 A_stats = [bootstrap_A_from_df(df) for df in dataset]
 exp_labels = ["Manual", "Automated", "Corrected"]
-A_val = np.array([A.value for A in A_stats])
-A_err = np.array([A.errorbar() for A in A_stats]).T
-
+# %%
+A_val = np.array([A[0] for A in A_stats])
+A_dist = np.stack([A[1] for A in A_stats])
+A_err = np.array([A[2] for A in A_stats])
+# %%
+A_val
 # %%
 from matplotlib import ticker
+def plot_column_scatter(means, values, CIs, experiment_labels, experiment_name, statistic_name, p_values):
+    fig, ax = plt.subplots(1, 1, figsize = (4, 4))
+    
+    x_means = np.arange(len(means))
+    errs = np.abs(CIs.T - means)
+    ax.errorbar(x_means, means, errs, linestyle = '', marker = '.', color = 'black', capsize = 4.0)
+    
+    Dx_scatter = np.random.uniform(low = -0.2, high = 0.2, size = values.shape)
+    for i, x_mean in enumerate(x_means):
+        ax.scatter(x_mean+Dx_scatter[i], values[i], s = 6.0, facecolors = None, alpha = 0.3)
+    ax.axhline(y = 0.5, linestyle = "--", color = "firebrick", linewidth = 2.0, alpha = 0.8)
+
+    ax.set_xticks(x_means)
+    ax.set_xticklabels(experiment_labels, fontsize = "small")
+    ax.set_ylabel(f"{statistic_name}\n({experiment_name} vs non-transfected)", fontsize = "small")
+
+    x_margin = 0.4
+    ax.set_xlim((x_means[0]-x_margin, x_means[-1]+x_margin))
+    y_lim = (0, 1)
+    ax.set_ylim(y_lim)
+
+    for i, p in enumerate(p_values):
+        if p < 0.001:
+            ax.text(i, 0.87*y_lim[1], "***", horizontalalignment = "center")
+    ax.text(2.3, 0.04*y_lim[1], "***: $p < 0.001$ for the\nBrunner-Munzel test", fontsize = "small", horizontalalignment = "right", bbox = {"facecolor": "white", "edgecolor": "grey", "alpha": 0.85})
+    ax.grid(alpha = 0.5)
+
+    fig.tight_layout()
+    return fig
+# %%
+p_vals = [0.94, 0, 0.33]
+fig = plot_column_scatter(A_val, A_dist, A_err, exp_labels, "shLacz", "A statistic", p_vals )
+#plt.savefig("./figures/figure5C.png")
+# %%
+# %%
+p_vals = [0, 0.86, 0]
+fig = plot_column_scatter(A_val, A_dist, A_err, exp_labels, "shCAPN1", "A statistic", p_vals )
+#plt.savefig("./figures/figure4C.png")
+# %%
 def plot_statistics_bar(values, errors, experiment_labels, experiment_name, statistic_name, p_values):
     x = np.arange(len(A_stats))
     
     fig, ax = plt.subplots(1, 1, figsize = (4, 4))
     ax.bar(x, values, yerr = errors, color = "palegreen", edgecolor = "black", capsize = 4.0)
-    ax.axhline(y = 0.5, linestyle = "--", color = "firebrick", linewidth = 2.0, alpha = 0.8)
+    #ax.axhline(y = 0.5, linestyle = "--", color = "firebrick", linewidth = 2.0, alpha = 0.8)
     
     ax.set_xticks(x)
     ax.set_xticklabels(experiment_labels, fontsize = "small")
-    ax.set_ylabel(f"{statistic_name}\n(non-transfected vs {experiment_name})", fontsize = "small")
-    y_lim = (0, 1)
+    ax.set_ylabel(f"{statistic_name}\n({experiment_name} vs non-transfected)", fontsize = "small")
+    y_lim = (0, 0.2)
     for i, p in enumerate(p_values):
         if p < 0.001:
-            ax.text(i, 0.65*y_lim[1], "***", horizontalalignment = "center")
+            ax.text(i, 0.85*y_lim[1], "***", horizontalalignment = "center")
     ax.grid(alpha = 0.3)
     ax.set_ylim(y_lim)
-    ax.text(0.4, 0.82*y_lim[1], "***: $p < 0.001$ for the\nBrunner-Munzel test", fontsize = "small", horizontalalignment = "left", bbox = {"facecolor": "none", "edgecolor": "lightgrey"})
-    #major_tick_loc = ticker.MultipleLocator(base = 0.05)
-    #ax.yaxis.set_major_locator(major_tick_loc)
+    ax.text(0.02, 0.04*y_lim[1], "***: $p < 0.001$ for the\nKolmogorov-Smirnoff test", fontsize = "small", horizontalalignment = "left", bbox = {"facecolor": "white", "edgecolor": "grey", "alpha": 0.85})
+    major_tick_loc = ticker.MultipleLocator(base = 0.05)
+    ax.yaxis.set_major_locator(major_tick_loc)
 
     fig.tight_layout()
     return fig
 # %%
 p_vals = [0, 0.86, 0]
 fig = plot_statistics_bar(A_val, A_err, exp_labels, "shCAPN1", "A statistic", p_vals)
-#plt.savefig("./figures/figure4C.png")
+#plt.savefig("column ./figures/figure4C.png")
 # %%
 p_vals = [0.94, 0, 0.33]
 fig = plot_statistics_bar(A_val, A_err, exp_labels, "shLacz", "A statistic", p_vals)
@@ -213,12 +255,14 @@ fig = plot_statistics_bar(A_val, A_err, exp_labels, "shLacz", "A statistic", p_v
 # %%
 import scipy.stats as scstats
 dataset = shLacz_dataset
-KS_test_results = np.array([scstats.ks_2samp(*df_columns_to_arrays(df)) for df in dataset])
+KS_test_results = np.array([scstats.ks_2samp(df_columns_to_arrays(df)[1], df_columns_to_arrays(df)[0]) for df in dataset])
 KS_vals = KS_test_results[:,0]
 p_vals = KS_test_results[:,1]
 
 fig = plot_statistics_bar(KS_vals, None, exp_labels, "shLacz", "KS statistic", p_vals)
 #plt.savefig("./figures/figure5D.png")
+# %%
+p_vals
 # %%
 sample1 = np.array(fed_fast_dataset[0].iloc[:,0], dtype = float)
 sample2 = np.array(fed_fast_dataset[0].iloc[:,1], dtype = float)
@@ -232,11 +276,11 @@ p
 # %%
 scstats.mstats.spearmanr(sample1, sample2)
 # %%
-data_ind = 3
-sample1, sample2 = shLacz_dataset[data_ind].iloc[:,0], shLacz_dataset[data_ind].iloc[:,1]
+data_ind = 2
+sample1, sample2 = shLacz_dataset[data_ind].iloc[:,1], shLacz_dataset[data_ind].iloc[:,0]
 sample1, sample2 = np.array(sample1, np.float32), np.array(sample2, np.float32)
 scstats.mstats.brunnermunzel(sample1, sample2, alternative = "two-sided", distribution = "normal")
-A_statistic(sample1, sample2)
+#A_statistic(sample1, sample2)
 # %%
 output = bootstrap_confidence_interval_2samp(sample1, sample2, A_statistic, B = 20000, CI_algorithm = "BCa")
 #%%
@@ -255,10 +299,11 @@ output = bootstrap_confidence_interval_2samp(sample1, sample2, A_statistic, B = 
 stat = Statistic(*output, "A_statistic")
 print(stat)
 # %%
-data_ind = 3
-sample1, sample2 = shCAPN1_dataset[data_ind].iloc[:,0], shCAPN1_dataset[data_ind].iloc[:,1]
+import scipy.stats as scstats
+data_ind = 2
+sample1, sample2 = shCAPN1_dataset[data_ind].iloc[:,1], shCAPN1_dataset[data_ind].iloc[:,0]
 sample1, sample2 = np.array(sample1, np.float32), np.array(sample2, np.float32)
-scstats.mstats.brunnermunzel(sample1, sample2, alternative = "less", distribution = "normal")
+scstats.mstats.brunnermunzel(sample1, sample2, alternative = "greater", distribution = "normal")
 # %%
 A_statistic(sample1, sample2)
 # %%
